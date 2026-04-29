@@ -14,6 +14,12 @@ usuarios = {
     }
 }
 
+# ✅ Ruta principal (para que no aparezca Not Found)
+@app.route("/")
+def home():
+    return "Servidor funcionando 🚀"
+
+# ✅ Endpoint de verificación
 @app.route("/verificar", methods=["GET"])
 def verificar():
     user = request.args.get("user")
@@ -25,5 +31,6 @@ def verificar():
     
     return "BLOQUEADO"
 
+# ⚠️ Esto en Render no se usa, pero lo dejamos para local
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001, debug=True)
