@@ -96,6 +96,10 @@ def cambiar_estado():
 
     return "OK"
 
+@app.route("/test")
+def test():
+    return "FUNCIONA NUEVO CODIGO"
+
 # =========================
 # PANEL WEB
 # =========================
