@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import sqlite3
 from datetime import datetime, timedelta
+import os
 
 app = Flask(__name__)
 
@@ -9,26 +10,37 @@ app = Flask(__name__)
 # =========================
 
 def conectar():
-    return sqlite3.connect("licencias.db")
+    db_path = os.path.join(os.getcwd(), "licencias.db")
+    return sqlite3.connect(db_path)
 
 def init_db():
     conn = conectar()
     c = conn.cursor()
 
     c.execute("""
-CREATE TABLE IF NOT EXISTS licencias (
-    pc_id TEXT PRIMARY KEY,
-    nombre TEXT,
-    estado TEXT,
-    fecha_inicio TEXT,
-    fecha_vencimiento TEXT
-)
-""")
-
- 
+    CREATE TABLE IF NOT EXISTS licencias (
+        pc_id TEXT PRIMARY KEY,
+        nombre TEXT,
+        estado TEXT,
+        fecha_inicio TEXT,
+        fecha_vencimiento TEXT
+    )
+    """)
 
     conn.commit()
     conn.close()
+
+# 🔥 IMPORTANTE: esto corre SIEMPRE (también en Render)
+init_db()
+
+# =========================
+# ERROR HANDLER
+# =========================
+
+@app.errorhandler(Exception)
+def handle_error(e):
+    print("🔥 ERROR REAL:", e)
+    return "Error interno", 500
 
 # =========================
 # HOME
@@ -45,9 +57,9 @@ def home():
 @app.route("/verificar", methods=["GET"])
 def verificar():
     pc = request.args.get("pc")
-   
+
     if not pc:
-       return "ERROR"
+        return "FALTA PC", 400
 
     conn = conectar()
     c = conn.cursor()
@@ -56,7 +68,6 @@ def verificar():
     row = c.fetchone()
 
     # 🆕 SI NO EXISTE → CREAR PRUEBA
-
     if not row:
         inicio = datetime.now()
         vencimiento = inicio + timedelta(days=7)
@@ -79,7 +90,6 @@ def verificar():
     estado, vencimiento = row
 
     # ⏳ CONTROL DE VENCIMIENTO
-
     if vencimiento:
         fecha_venc = datetime.fromisoformat(vencimiento)
 
@@ -113,9 +123,16 @@ def licencias():
 
 @app.route("/estado", methods=["POST"])
 def estado():
-    data = request.json
+    data = request.get_json(silent=True)
+
+    if not data:
+        return "ERROR: no JSON", 400
+
     pc = data.get("pc")
     estado = data.get("estado")
+
+    if not pc or not estado:
+        return "ERROR: faltan datos", 400
 
     conn = conectar()
     c = conn.cursor()
@@ -127,7 +144,39 @@ def estado():
     return "OK"
 
 # =========================
-# PANEL PRO
+# RENOVAR
+# =========================
+
+@app.route("/renovar", methods=["POST"])
+def renovar():
+    data = request.get_json(silent=True)
+
+    if not data:
+        return "ERROR: no JSON", 400
+
+    pc = data.get("pc")
+
+    if not pc:
+        return "ERROR: falta pc", 400
+
+    nueva_fecha = datetime.now() + timedelta(days=30)
+
+    conn = conectar()
+    c = conn.cursor()
+
+    c.execute("""
+    UPDATE licencias 
+    SET estado = 'ACTIVO', fecha_vencimiento = ?
+    WHERE pc_id = ?
+    """, (nueva_fecha.isoformat(), pc))
+
+    conn.commit()
+    conn.close()
+
+    return "OK"
+
+# =========================
+# PANEL
 # =========================
 
 @app.route("/panel")
@@ -160,8 +209,6 @@ def panel():
                     let html = "";
 
                     data.forEach(row => {
-
-                        // 🔥 CALCULAR DÍAS
                         let venc = row[3];
                         let dias = "-";
 
@@ -172,7 +219,6 @@ def panel():
                             dias = diff + " días";
                         }
 
-                        // 🔥 ARMAR FILA
                         html += `
                         <tr>
                             <td>${row[0]}</td>
@@ -219,30 +265,10 @@ def panel():
     </body>
     </html>
     """
-@app.route("/renovar", methods=["POST"])
-def renovar():
-    data = request.json
-    pc = data.get("pc")
-
-    nueva_fecha = datetime.now() + timedelta(days=30)
-
-    conn = conectar()
-    c = conn.cursor()
-
-    c.execute("""
-    UPDATE licencias 
-    SET estado = 'ACTIVO', fecha_vencimiento = ?
-    WHERE pc_id = ?
-    """, (nueva_fecha.isoformat(), pc))
-
-    conn.commit()
-    conn.close()
-
-    return "OK"
 
 # =========================
-# RUN
+# RUN LOCAL
 # =========================
+
 if __name__ == "__main__":
-    init_db()
     app.run(host="0.0.0.0", port=5001)
