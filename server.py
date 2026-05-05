@@ -10,10 +10,14 @@ app = Flask(__name__)
 # CONFIG GEMINI
 # =========================
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+# Usamos una sola variable para evitar confusiones en Render
+# Asegurate que en Render la variable se llame GOOGLE_API_KEY
+gemini_key = os.getenv("GOOGLE_API_KEY") or os.getenv("Default_Gemini_API_Key")
 
-model = genai.GenerativeModel("gemini-1.5-flash")  # 🔥 mejor modelo
+genai.configure(api_key=gemini_key)
 
+# Usar 'gemini-1.5-flash-latest' suele evitar el error 404 de versiones v1beta
+model = genai.GenerativeModel("gemini-1.5-flash-latest")
 # =========================
 # DB
 # =========================
@@ -188,32 +192,31 @@ def renovar():
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.get_json(silent=True)
-
     if not data:
         return jsonify({"error": "No JSON"}), 400
 
     mensaje = data.get("mensaje")
-
     if not mensaje:
         return jsonify({"error": "Falta mensaje"}), 400
 
     try:
-        prompt = f"""
-Sos ALBERTO, un asistente virtual argentino, claro, directo y útil.
-Respondés de forma natural, amigable y profesional.
-No das respuestas genéricas, ayudás de verdad.
-
-Usuario: {mensaje}
-"""
+        # Prompt mejorado para que mantenga la personalidad
+        prompt = f"Sos ALBERTO, un asistente virtual argentino, amigable y directo. Usuario: {mensaje}"
 
         response = model.generate_content(prompt)
-        respuesta = response.text
+        
+        # Verificamos si la respuesta tiene contenido válido
+        if response.candidates and len(response.candidates[0].content.parts) > 0:
+            respuesta = response.text
+        else:
+            respuesta = "Che, no te pude entender bien. ¿Me repetís?"
 
         return jsonify({"respuesta": respuesta})
 
     except Exception as e:
-        print("🔥 ERROR GEMINI:", e)
-        return jsonify({"error": "Error con IA"}), 500
+        # Esto te va a mostrar el error exacto en los logs de Render
+        print(f"🔥 ERROR GEMINI DETALLADO: {str(e)}")
+        return jsonify({"error": "Error con la IA", "detalles": str(e)}), 500
 # =========================
 # PANEL
 # =========================
@@ -227,4 +230,6 @@ def panel():
 # =========================
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001)
+    # Render asigna el puerto en la variable PORT
+    puerto = int(os.environ.get("PORT", 5001))
+    app.run(host="0.0.0.0", port=puerto)
