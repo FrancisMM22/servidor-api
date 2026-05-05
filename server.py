@@ -9,15 +9,15 @@ app = Flask(__name__)
 # =========================
 # CONFIG GEMINI
 # =========================
-
-# Usamos una sola variable para evitar confusiones en Render
-# Asegurate que en Render la variable se llame GOOGLE_API_KEY
 gemini_key = os.getenv("GOOGLE_API_KEY") or os.getenv("Default_Gemini_API_Key")
+
+if not gemini_key:
+    print("🔥 ERROR: No se encontró ninguna API KEY en las variables de entorno")
 
 genai.configure(api_key=gemini_key)
 
-# Usar 'gemini-1.5-flash-latest' suele evitar el error 404 de versiones v1beta
-model = genai.GenerativeModel("gemini-1.5-flash-latest")
+# Usamos el nombre estándar que aceptan las versiones nuevas
+model = genai.GenerativeModel("gemini-1.5-flash")
 # =========================
 # DB
 # =========================
