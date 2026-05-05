@@ -2,8 +2,17 @@ from flask import Flask, request, jsonify
 import sqlite3
 from datetime import datetime, timedelta
 import os
+import google.generativeai as genai  # 🔥 FALTABA ESTO
 
 app = Flask(__name__)
+
+# =========================
+# CONFIG GEMINI
+# =========================
+
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+model = genai.GenerativeModel("gemini-1.5-flash")  # 🔥 mejor modelo
 
 # =========================
 # DB
@@ -30,7 +39,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-# 🔥 IMPORTANTE: esto corre SIEMPRE (también en Render)
 init_db()
 
 # =========================
@@ -51,7 +59,7 @@ def home():
     return "Servidor funcionando 🚀"
 
 # =========================
-# AUTO REGISTRO + VERIFICAR
+# VERIFICAR
 # =========================
 
 @app.route("/verificar", methods=["GET"])
@@ -67,7 +75,6 @@ def verificar():
     c.execute("SELECT estado, fecha_vencimiento FROM licencias WHERE pc_id = ?", (pc,))
     row = c.fetchone()
 
-    # 🆕 SI NO EXISTE → CREAR PRUEBA
     if not row:
         inicio = datetime.now()
         vencimiento = inicio + timedelta(days=7)
@@ -89,7 +96,6 @@ def verificar():
 
     estado, vencimiento = row
 
-    # ⏳ CONTROL DE VENCIMIENTO
     if vencimiento:
         fecha_venc = datetime.fromisoformat(vencimiento)
 
@@ -103,7 +109,7 @@ def verificar():
     return estado
 
 # =========================
-# LISTAR PCs
+# LISTAR
 # =========================
 
 @app.route("/licencias")
@@ -118,7 +124,7 @@ def licencias():
     return jsonify(data)
 
 # =========================
-# CAMBIAR ESTADO
+# ESTADO
 # =========================
 
 @app.route("/estado", methods=["POST"])
@@ -176,98 +182,48 @@ def renovar():
     return "OK"
 
 # =========================
+# CHAT IA
+# =========================
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    data = request.get_json(silent=True)
+
+    if not data:
+        return jsonify({"error": "No JSON"}), 400
+
+    mensaje = data.get("mensaje")
+
+    if not mensaje:
+        return jsonify({"error": "Falta mensaje"}), 400
+
+    try:
+        prompt = f"""
+Sos ALBERTO, un asistente virtual argentino, claro, directo y útil.
+Respondés de forma natural, amigable y profesional.
+No das respuestas genéricas, ayudás de verdad.
+
+Usuario: {mensaje}
+"""
+
+        response = model.generate_content(prompt)
+        respuesta = response.text
+
+        return jsonify({"respuesta": respuesta})
+
+    except Exception as e:
+        print("🔥 ERROR GEMINI:", e)
+        return jsonify({"error": "Error con IA"}), 500
+# =========================
 # PANEL
 # =========================
 
 @app.route("/panel")
 def panel():
-    return """
-    <html>
-    <body style="font-family: Arial; background:#f4f6f8; text-align:center;">
-        <h2>Panel de Licencias</h2>
-
-        <button onclick="cargar()">Actualizar</button>
-        <br><br>
-
-        <table border="1" style="margin:auto; background:white;">
-            <thead>
-                <tr>
-                    <th>PC ID</th>
-                    <th>Estado</th>
-                    <th>Días restantes</th>
-                    <th>Acción</th>
-                </tr>
-            </thead>
-            <tbody id="tabla"></tbody>
-        </table>
-
-        <script>
-            function cargar(){
-                fetch('/licencias')
-                .then(res => res.json())
-                .then(data => {
-                    let html = "";
-
-                    data.forEach(row => {
-                        let venc = row[3];
-                        let dias = "-";
-
-                        if (venc){
-                            let fecha = new Date(venc);
-                            let hoy = new Date();
-                            let diff = Math.ceil((fecha - hoy) / (1000 * 60 * 60 * 24));
-                            dias = diff + " días";
-                        }
-
-                        html += `
-                        <tr>
-                            <td>${row[0]}</td>
-                            <td>${row[2]}</td>
-                            <td>${dias}</td>
-                            <td>
-                                <button onclick="activar('${row[0]}')">Activar</button>
-                                <button onclick="bloquear('${row[0]}')">Bloquear</button>
-                                <button onclick="renovar('${row[0]}')">Renovar</button>
-                            </td>
-                        </tr>`;
-                    });
-
-                    document.getElementById("tabla").innerHTML = html;
-                });
-            }
-
-            function activar(pc){
-                fetch('/estado', {
-                    method:'POST',
-                    headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({pc: pc, estado:'ACTIVO'})
-                }).then(()=>cargar());
-            }
-
-            function bloquear(pc){
-                fetch('/estado', {
-                    method:'POST',
-                    headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({pc: pc, estado:'BLOQUEADO'})
-                }).then(()=>cargar());
-            }
-
-            function renovar(pc){
-                fetch('/renovar', {
-                    method:'POST',
-                    headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({pc: pc})
-                }).then(()=>cargar());
-            }
-
-            cargar();
-        </script>
-    </body>
-    </html>
-    """
+    return "<h2>Panel OK</h2>"
 
 # =========================
-# RUN LOCAL
+# RUN
 # =========================
 
 if __name__ == "__main__":
